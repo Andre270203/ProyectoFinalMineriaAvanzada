@@ -29,6 +29,7 @@ library(pROC)
 library(boot)
 library(randomForest)
 library(caret)
+library(factoextra)
 ```
 
 #Carga DataSet
@@ -377,3 +378,43 @@ roc_data <- roc(data_diab$Outcome, predict(rf_model_cv, data_diab))
 auc <- round(auc(roc_data), 4)
 print(paste0("El área bajo la curva ROC es: ", auc))
 ```
+
+
+#prueba de modelo KMEANS
+
+```{r}
+
+# Prueba de codo para seleccionar el número de clústeres óptimo
+
+set.seed(123)
+wss <- vector()
+for (i in 1:15) wss[i] <- sum(kmeans(datos[,-1], centers = i)$withinss)
+plot(1:15, wss, type = "b", xlab = "Number of Clusters", ylab = "Within groups sum of squares")
+
+# Ejecutar kmeans con el número de clústeres óptimo
+set.seed(123)
+k <- 2 # número óptimo de clústeres obtenido en la prueba de codo
+km <- kmeans(datos[,-1], centers = k, nstart = 25)
+
+```
+
+```{r}
+# Renombrar los clusters
+names(km$cluster) <- c("Cluster 1", "Cluster 2")
+
+# Verificar los nuevos nombres de cluster
+table(km$cluster)
+
+# Gráfico de los clústeres
+fviz_cluster(km, data = datos[,-1], geom = "point", stand = FALSE)
+
+```
+
+
+
+
+
+
+
+
+
