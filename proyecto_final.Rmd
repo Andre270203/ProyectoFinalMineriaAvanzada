@@ -202,15 +202,14 @@ rf_model <- randomForest(Outcome ~ . -SkinThickness, data = train, ntree = 100)
 
 #Validacion Cruzada
 ```{r}
-update.packages("caret")
-library(caret)
+
 cat("Regresión logistica", "\n", "\n")
 # Validación cruzada con 10 pliegues
 cv_log_reg <- cv.glm(train, log_reg_model, K = 10)
 
 # Obtener la media y la desviación estándar del error de predicción
-mean_error_logreg <- mean(cv$delta) # media del error de predicción
-sd_error_logreg <- sd(cv$delta)     # desviación estándar del error de predicción
+mean_error<- mean(cv_log_reg$delta) # media del error de predicción
+sd_error<- sd(cv_log_reg$delta)     # desviación estándar del error de predicción
 
 # Imprimir los resultados
 cat("Regresión Logistica", "\n", "\n")
@@ -219,12 +218,33 @@ cat("Desviación estándar del error de predicción: ", sd_error, "\n")
 
 
 cat("\n","\n", "Random Forest", "\n", "\n")
+# Verificar si hay valores faltantes en la variable Outcome
+any(is.na(train$Outcome))
+
+# Completar valores faltantes en Outcome (si es necesario)
+train$Outcome[is.na(train$Outcome)] <- 0
+
+# Convertir Outcome a numérico
+train$Outcome <- as.numeric(train$Outcome)
+
+# Validación cruzada con Random Forest
 ctrl <- trainControl(method = "cv", number = 10)
-cv_results <- cv(rf_model, control = ctrl)
+cv_results <- train(Outcome ~ ., data = train, method = "rf", trControl = ctrl)
+
+# Obtener la media y la desviación estándar del error de predicción
+mean_error_rf <- mean(cv_results$results$RMSE) # media del error de predicción
+sd_error_rf <- sd(cv_results$results$RMSE) # desviación estándar del error de predicción
+
+# Imprimir los resultados
+cat("\n","\n", "Random Forest", "\n", "\n")
+cat("Media del error de predicción: ", mean_error*100,"%", "\n")
+cat("Desviación estándar del error de predicción: ", sd_error, "\n")
 ```
 
 #Area bajo la curva
 ```{r}
+cat("Regresión logistica", "\n", "\n")
+
 # Ajustar el modelo al conjunto de datos de entrenamiento
 fit <- predict(log_reg_model, train, type = "response")
 
@@ -233,6 +253,8 @@ auc <- roc(train$Outcome, fit)
 
 # Imprimir el valor del área bajo la curva ROC
 cat("Área bajo la curva ROC: ", auc$auc, "\n")
+
+cat("\n","\n", "Random Forest", "\n", "\n")
 ```
 
 #Resumen del modelo de regresión logistica
@@ -327,43 +349,3 @@ roc_data <- roc(data_diab$Outcome, predict(rf_model_cv, data_diab))
 auc <- round(auc(roc_data), 4)
 print(paste0("El área bajo la curva ROC es: ", auc))
 ```
-
-
-#prueba de modelo KMEANS
-
-```{r}
-
-# Prueba de codo para seleccionar el número de clústeres óptimo
-
-set.seed(123)
-wss <- vector()
-for (i in 1:15) wss[i] <- sum(kmeans(datos[,-1], centers = i)$withinss)
-plot(1:15, wss, type = "b", xlab = "Number of Clusters", ylab = "Within groups sum of squares")
-
-# Ejecutar kmeans con el número de clústeres óptimo
-set.seed(123)
-k <- 2 # número óptimo de clústeres obtenido en la prueba de codo
-km <- kmeans(datos[,-1], centers = k, nstart = 25)
-
-```
-
-```{r}
-# Renombrar los clusters
-names(km$cluster) <- c("Cluster 1", "Cluster 2")
-
-# Verificar los nuevos nombres de cluster
-table(km$cluster)
-
-# Gráfico de los clústeres
-fviz_cluster(km, data = datos[,-1], geom = "point", stand = FALSE)
-
-```
-
-
-
-
-
-
-
-
-
