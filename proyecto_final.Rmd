@@ -8,6 +8,8 @@ output: html_document
 #Algoritmos utilizado: Regresion logistica y RandomForest
 
 ```{r setup, include=FALSE}
+#install.packages("knitr")
+library(knitr)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
@@ -37,7 +39,7 @@ library(factoextra)
 data_diab <- read.csv("diabetes-dataset.csv", header = TRUE, dec = ".", sep = ",", na.strings = c("", "NA", "N/A", "NULL"))
 data_diab <- na.omit(data_diab)
 
-data_diab <- data.frame(datos_diab)
+data_diab <- data.frame(data_diab)
 data_diab$Outcome <- factor(data_diab$Outcome)
 ```
 
@@ -58,7 +60,7 @@ EDA(data_diab$DiabetesPedigreeFunction)
 EDA(data_diab$Age)
 ```
 
-#Analisi de Bigotes
+#Analisis de Bigotes
 ```{r}
 ggplot(data = data_diab, mapping = aes(x = Outcome, y = Pregnancies)) +
 geom_boxplot(aes(color = Outcome)) +
@@ -110,41 +112,24 @@ theme(legend.position = "null")
 
 ```
 
-#Prueba Royston
 ```{r}
-royston_test <- mvn(data = data_diab[,-9], mvnTest = "royston", multivariatePlot = "qq")
-```
-```{r}
+royston_test <- mvn(data = data_diab[,-9], mvnTest = "royston")
 royston_test$multivariateNormality
-```
 
-# El modelo Mann-Whitney lo utilizamos para comparar las medianas de dos grupos independientes 
-# en una variable ordinal o continua no paramétrica.
-```{r}
-# Importar datos del archivo CSV
-datos <- read.csv("diabetes-dataset.csv")
-
-# Realizar la prueba de Mann-Whitney para datos no pareados
-wilcox.test(datos$Glucose, datos$Pregnancies)
-
-```
-
-# El modelo Kruskal-Wallis lo utilizamos para comparar las medianas de tres o más grupos independientes
-# en una variable ordinal o continua no paramétrica.
-```{r}
-# Importar datos del archivo CSV
-datos <- read.csv("diabetes-dataset.csv")
-
-# Realizar la prueba de Kruskal-Wallis
-kruskal.test(datos$BMI, datos$DiabetesPedigreeFunction)
-```
-
-#Test estaditicos
-```{r}
 hz_test <- mvn(data = data_diab[,-9], mvnTest = "hz")
 hz_test$multivariateNormality
 ```
 
+# El modelo Mann-Whitney lo utilizamos para comparar las medianas de dos grupos independientes en una variable ordinal o continua no paramétrica.
+
+# El modelo Kruskal-Wallis lo utilizamos para comparar las medianas de tres o más grupos independientes en una variable ordinal o continua no paramétrica.
+```{r}
+# Realizar la prueba de Mann-Whitney para datos no pareados
+wilcox.test(data_diab$Glucose, data_diab$Pregnancies)
+
+# Realizar la prueba de Kruskal-Wallis
+kruskal.test(data_diab$BMI, data_diab$DiabetesPedigreeFunction)
+```
 #Test de Normalidad
 ```{r}
 par(mfcol = c(2, 8))
@@ -193,31 +178,41 @@ dim(test)
 
 ```
 
+```{r}
+# Modelo de regresión logistica
+log_reg_model = glm(Outcome ~ . -SkinThickness, data = train, family = binomial)
+
+# Modelo de Random Forest
+rf_model <- randomForest(Outcome ~ . -SkinThickness, data = train, ntree = 100)
+```
+
+
 #Validacion Cruzada
 ```{r}
-# Definir el modelo
-model = glm(Outcome ~ . -SkinThickness, data = train, family = binomial)
 
+cat("Regresión logistica", "\n", "\n")
 # Validación cruzada con 10 pliegues
-cv <- cv.glm(train, model, K = 10)
+cv_log_reg <- cv.glm(train, log_reg_model, K = 10)
 
 # Obtener la media y la desviación estándar del error de predicción
-mean_error <- mean(cv$delta) # media del error de predicción
-sd_error <- sd(cv$delta)     # desviación estándar del error de predicción
-
+mean_error_logreg <- mean(cv$delta) # media del error de predicción
+sd_error_logreg <- sd(cv$delta)     # desviación estándar del error de predicción
 
 # Imprimir los resultados
+cat("Regresión Logistica", "\n", "\n")
 cat("Media del error de predicción: ", mean_error*100,"%", "\n")
 cat("Desviación estándar del error de predicción: ", sd_error, "\n")
 
+
+cat("\n","\n", "Random Forest", "\n", "\n")
+ctrl <- trainControl(method = "cv", number = 10)
+cv_results <- cv(rf_model, control = ctrl)
 ```
+
 #Area bajo la curva
 ```{r}
-# Definir el modelo
-model <- glm(Outcome ~ . -SkinThickness, data = train, family = binomial)
-
 # Ajustar el modelo al conjunto de datos de entrenamiento
-fit <- predict(model, train, type = "response")
+fit <- predict(log_reg_model, train, type = "response")
 
 # Calcular el área bajo la curva ROC utilizando el conjunto de datos de entrenamiento
 auc <- roc(train$Outcome, fit)
@@ -226,28 +221,30 @@ auc <- roc(train$Outcome, fit)
 cat("Área bajo la curva ROC: ", auc$auc, "\n")
 ```
 
-#Modelo de regresion logistica sin la variable Skinthickness
+#Resumen del modelo de regresión logistica
 ```{r}
-modelo2 <- glm(Outcome ~ . -SkinThickness, data = train, family = binomial)
-summary(modelo2)
+cat("Regresión logistica","\n","\n")
+summary(log_reg_model)
+cat("\n","\n","Random forest","\n","\n")
+summary(rf_model)
 ```
 
 #Coeficientes de regresion logistica
 ```{r}
 options(scipen = 999) #Para evitar que mis datos me salgan en notación
 #científica
-exp(cbind(OR=coef(modelo2),confint(modelo2)))
+exp(cbind(OR=coef(log_reg_model),confint(log_reg_model)))
 ```
 
 #variance inflation factor
 ```{r}
-vif(modelo2)
+vif(log_reg_model)
 ```
 
 #Matriz de Confusion
 ```{r}
-predicciones <- ifelse(test = modelo2$fitted.values > 0.5, yes = 1, no = 0)
-matriz_confusion <- table(modelo2$model$Outcome, predicciones,
+predicciones <- ifelse(test = log_reg_model$fitted.values > 0.5, yes = 1, no = 0)
+matriz_confusion <- table(log_reg_model$model$Outcome, predicciones,
                           dnn = c("observaciones", "predicciones"))
 matriz_confusion
 ```
@@ -258,21 +255,16 @@ mosaic(matriz_confusion, shade = T, colorize = T,
 #Resultados
 ```{r}
 acierto_global <- ((725+208)/(725+208+185+82))*100
-acierto_global
+cat("acierto global: ",acierto_global,"\n")
 
 error_global <- 100 - acierto_global
-error_global
+cat("error global: ",error_global,"\n")
 
 acierto_positivo <- (208/(208+82))*100
-acierto_positivo
+cat("acierto positivo: ",acierto_positivo,"\n")
 
 acierto_negativo <- (725/(185+725))*100
-acierto_negativo
-```
-```{r}
-head(test)
-glm.probs <- predict(modelo2,type = "response", test)
-glm.probs[1:5]
+cat("acierto negativo: ",acierto_negativo,"\n")
 ```
 
 #Matriz de confusion (Data: Test) 
@@ -292,91 +284,34 @@ mosaic(matriz.test, shade = T, colorize = T,
 #Resultados
 ```{r}
 acierto_global_test <- ((453+160)/(453+160+131+56))*100
-acierto_global_test
+cat("acierto global: ",acierto_global_test, "\n")
 
 error_global_test <- 100 - acierto_global_test
-error_global_test
+cat("error global: ",error_global_test, "\n")
 
 acierto_positivo_test <- (160/(160+56))*100
-acierto_positivo_test
+cat("Acierto positivo: ",acierto_positivo_test, "\n")
 
 acierto_negativo_test <- (453/(131+453))*100
-acierto_negativo_test
+cat("Acierto negativo: ",acierto_negativo_test, "\n")
 ```
 
 #Algoritmo RandomForest
 ```{r}
-# Ajustamos el modelo de Random Forest
-rf_model <- randomForest(train$Outcome ~ ., data = train, ntree = 100)
-
 # Evaluamos la precisión del modelo en el conjunto de prueba
 predictions <- predict(rf_model, test)
 table(predictions, test$Outcome)
 ```
 
-#Validacion Cruzada
-```{r}
-# Definimos los índices de los pliegues para la validación cruzada
-folds <- createFolds(data_diab$Outcome, k = 10, returnTrain = TRUE)
-
-# Definimos la función de entrenamiento y evaluación del modelo
-train_control <- trainControl(method = "cv", index = folds)
-
-# Entrenamos el modelo con Random Forest
-rf_model <- train(Outcome ~ ., data = data_diab, method = "rf", trControl = train_control)
-
-# Imprimimos el resultado
-print(rf_model)
-```
-
 #Area bajo la curva
 ```{r}
-# Eliminación de valores faltantes
-data_diab <- na.omit(data_diab)
-
-# Convertir variables categóricas en numéricas
-data_diab$Outcome <- as.numeric(factor(data_diab$Outcome))
-data_diab$Age <- as.numeric(factor(data_diab$Age))
-data_diab$BloodPressure <- as.numeric(factor(data_diab$BloodPressure))
-data_diab$SkinThickness <- as.numeric(factor(data_diab$SkinThickness))
-data_diab$Insulin <- as.numeric(factor(data_diab$Insulin))
-data_diab$BMI <- as.numeric(factor(data_diab$BMI))
-data_diab$DiabetesPedigreeFunction <- as.numeric(factor(data_diab$DiabetesPedigreeFunction))
-
-# División de los datos en entrenamiento y test
-set.seed(123)
-ind <- sample(2, nrow(data_diab), replace = TRUE, prob = c(0.7, 0.3))
-train <- data_diab[ind == 1, ]
-test <- data_diab[ind == 2, ]
-
-# Ajustamos el modelo de Random Forest
-rf_model <- randomForest(train$Outcome ~ ., data = train, ntree = 100)
-
-# Evaluamos el modelo en el conjunto de prueba
-predictions <- predict(rf_model, test)
-
-# Tabla de contingencia
-table(predictions, test$Outcome)
-
-# Validación cruzada
-folds <- createFolds(train$Outcome, k = 10, returnTrain = TRUE)
-train_control <- trainControl(method = "cv", index = folds)
-rf_model_cv <- train(Outcome ~ ., data = train, method = "rf", trControl = train_control)
-
 # Generar curva ROC y calcular área bajo la curva
 roc_obj <- roc(response = data_diab$Outcome, predictor = predict(rf_model, data_diab))
 auc(roc_obj) 
 
-# Ajustar el modelo de Random Forest con contraste de suma
-rf_model <- randomForest(Outcome ~ ., data = train, ntree = 100)
-
-# Realizar la validación cruzada y generar la curva ROC
-train_control <- trainControl(method = "cv", index = folds)
-rf_model_cv <- train(Outcome ~ ., data = data_diab, method = "rf", trControl = train_control)
-
 roc_data <- roc(data_diab$Outcome, predict(rf_model_cv, data_diab))
 auc <- round(auc(roc_data), 4)
-print(paste0("El área bajo la curva ROC es: ", auc))
+print(paste0("El área bajo la curva ROC es: ", auc))
 ```
 
 
