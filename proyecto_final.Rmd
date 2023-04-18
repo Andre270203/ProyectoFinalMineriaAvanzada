@@ -183,9 +183,11 @@ step(modelo, direction = "backward")
 #Division de DataSet
 ```{r}
 set.seed(1)
-row.number = sample(1:nrow(data_diab), 0.6*nrow(data_diab))
+row.number = createDataPartition(data_diab$Outcome, p = 0.6, list = FALSE)
 train = data_diab[row.number,]
+train = train[,-4]
 test = data_diab[-row.number,]
+test = test[,-4]
 dim(train)
 dim(test)
 
@@ -193,10 +195,14 @@ dim(test)
 
 ```{r}
 # Modelo de regresión logistica
-log_reg_model = glm(Outcome ~ . -SkinThickness, data = train, family = binomial)
+log_reg_model = glm(Outcome ~ ., data = train, family = binomial)
 
 # Modelo de Random Forest
-rf_model <- randomForest(Outcome ~ . -SkinThickness, data = train, ntree = 100)
+design_matrix <- model.matrix(Outcome ~ ., data = train)
+response_variable <- train$Outcome
+
+set.seed(123)
+rf_model <- randomForest(design_matrix, response_variable, ntree = 500, mtry = 2)
 ```
 
 
@@ -212,50 +218,53 @@ mean_error<- mean(cv_log_reg$delta) # media del error de predicción
 sd_error<- sd(cv_log_reg$delta)     # desviación estándar del error de predicción
 
 # Imprimir los resultados
-cat("Regresión Logistica", "\n", "\n")
 cat("Media del error de predicción: ", mean_error*100,"%", "\n")
-cat("Desviación estándar del error de predicción: ", sd_error, "\n")
+cat("Desviación estándar del error de predicción: ", sd_error*100, "\n")
 
 
 cat("\n","\n", "Random Forest", "\n", "\n")
-# Verificar si hay valores faltantes en la variable Outcome
-any(is.na(train$Outcome))
-
-# Completar valores faltantes en Outcome (si es necesario)
-train$Outcome[is.na(train$Outcome)] <- 0
-
-# Convertir Outcome a numérico
-train$Outcome <- as.numeric(train$Outcome)
 
 # Validación cruzada con Random Forest
 ctrl <- trainControl(method = "cv", number = 10)
+set.seed(123)
 cv_results <- train(Outcome ~ ., data = train, method = "rf", trControl = ctrl)
 
 # Obtener la media y la desviación estándar del error de predicción
-mean_error_rf <- mean(cv_results$results$RMSE) # media del error de predicción
-sd_error_rf <- sd(cv_results$results$RMSE) # desviación estándar del error de predicción
+mean_error_rf <- mean(cv_results$resample$Accuracy) # media del error de predicción
+sd_error_rf <- sd(cv_results$resample$Accuracy) # desviación estándar del error de predicción
 
 # Imprimir los resultados
-cat("\n","\n", "Random Forest", "\n", "\n")
-cat("Media del error de predicción: ", mean_error*100,"%", "\n")
-cat("Desviación estándar del error de predicción: ", sd_error, "\n")
+cat("Media del error de predicción: ", mean_error_rf*100,"%", "\n")
+cat("Desviación estándar del error de predicción: ", sd_error_rf*100, "\n")
 ```
 
 #Area bajo la curva
 ```{r}
 cat("Regresión logistica", "\n", "\n")
 
-# Ajustar el modelo al conjunto de datos de entrenamiento
-fit <- predict(log_reg_model, train, type = "response")
+# Ajustar el modelo al conjunto de datos de prueba
+fit <- predict(log_reg_model, test, type = "response")
 
 # Calcular el área bajo la curva ROC utilizando el conjunto de datos de entrenamiento
-auc <- roc(train$Outcome, fit)
+auc <- roc(test$Outcome, fit)
 
 # Imprimir el valor del área bajo la curva ROC
 cat("Área bajo la curva ROC: ", auc$auc, "\n")
 
+
 cat("\n","\n", "Random Forest", "\n", "\n")
+
+# Obtener las predicciones del modelo para el conjunto de datos de prueba
+pred_rf <- predict(rf_model, newdata = test)
+
+# Calcular el área bajo la curva ROC
+roc_rf <- roc(response = test$Outcome, predictor = pred_rf)
+
+# Imprimir el valor del área bajo la curva ROC
+cat("Área bajo la curva ROC: ", roc_rf$auc)
+
 ```
+
 
 #Resumen del modelo de regresión logistica
 ```{r}
@@ -267,13 +276,13 @@ summary(rf_model)
 
 #Coeficientes de regresion logistica
 ```{r}
+
+cat("coeficientes de regresión","\n","\n")
 options(scipen = 999) #Para evitar que mis datos me salgan en notación
 #científica
 exp(cbind(OR=coef(log_reg_model),confint(log_reg_model)))
-```
 
-#variance inflation factor
-```{r}
+cat("\n","\n","factor de inflación de la varianza","\n","\n")
 vif(log_reg_model)
 ```
 
@@ -282,70 +291,31 @@ vif(log_reg_model)
 predicciones <- ifelse(test = log_reg_model$fitted.values > 0.5, yes = 1, no = 0)
 matriz_confusion <- table(log_reg_model$model$Outcome, predicciones,
                           dnn = c("observaciones", "predicciones"))
+cat("\nMatriz de Confusión - Regresión Logística\n")
+cat("Este es el resultado de evaluar el modelo en el conjunto de datos de entrenamiento:\n\n")
 matriz_confusion
 ```
 ```{r}
 mosaic(matriz_confusion, shade = T, colorize = T,
        gp = gpar(fill = matrix(c("green3", "red2", "red2", "green3"), 2, 2)))
 ```
-#Resultados
-```{r}
-acierto_global <- ((725+208)/(725+208+185+82))*100
-cat("acierto global: ",acierto_global,"\n")
-
-error_global <- 100 - acierto_global
-cat("error global: ",error_global,"\n")
-
-acierto_positivo <- (208/(208+82))*100
-cat("acierto positivo: ",acierto_positivo,"\n")
-
-acierto_negativo <- (725/(185+725))*100
-cat("acierto negativo: ",acierto_negativo,"\n")
-```
 
 #Matriz de confusion (Data: Test) 
 ```{r}
+glm.probs <- predict(log_reg_model, newdata = test, type = "response")
 glm.pred <- ifelse(glm.probs > 0.5, "1", "0")
 
-matriz.test <- table(test$Outcome,glm.pred,
+matriz.test <- table(test$Outcome, glm.pred,
       dnn = c("observaciones", "predicciones"))
+cat("\nMatriz de Confusión - Regresión Logística\n")
+cat("Este es el resultado de evaluar el modelo en el conjunto de datos de prueba:\n\n")
 matriz.test
 
-mean(glm.pred == test$Outcome)
 ```
+
 ```{r}
 mosaic(matriz.test, shade = T, colorize = T,
        gp = gpar(fill = matrix(c("green3", "red2", "red2", "green3"), 2, 2)))
-```
-#Resultados
-```{r}
-acierto_global_test <- ((453+160)/(453+160+131+56))*100
-cat("acierto global: ",acierto_global_test, "\n")
 
-error_global_test <- 100 - acierto_global_test
-cat("error global: ",error_global_test, "\n")
-
-acierto_positivo_test <- (160/(160+56))*100
-cat("Acierto positivo: ",acierto_positivo_test, "\n")
-
-acierto_negativo_test <- (453/(131+453))*100
-cat("Acierto negativo: ",acierto_negativo_test, "\n")
 ```
 
-#Algoritmo RandomForest
-```{r}
-# Evaluamos la precisión del modelo en el conjunto de prueba
-predictions <- predict(rf_model, test)
-table(predictions, test$Outcome)
-```
-
-#Area bajo la curva
-```{r}
-# Generar curva ROC y calcular área bajo la curva
-roc_obj <- roc(response = data_diab$Outcome, predictor = predict(rf_model, data_diab))
-auc(roc_obj) 
-
-roc_data <- roc(data_diab$Outcome, predict(rf_model_cv, data_diab))
-auc <- round(auc(roc_data), 4)
-print(paste0("El área bajo la curva ROC es: ", auc))
-```
