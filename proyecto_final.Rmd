@@ -113,6 +113,17 @@ theme(legend.position = "null")
 ```
 
 ```{r}
+# Prueba de normalidad de Shapiro-Wilk para cada variable independiente 
+vars <- c("Pregnancies", "Glucose", "BloodPressure", "SkinThickness", "Insulin", "BMI", "DiabetesPedigreeFunction", "Age") 
+sw_results <- data.frame(Variable = character(), p_valor = numeric(), Normalidad = character(), stringsAsFactors = FALSE) 
+for (i in vars) { 
+  p_val <- shapiro.test(data_diab[, i])$p.value 
+  norm <- ifelse(p_val > 0.05, "Normal", "No Normal") 
+  sw_results <- rbind(sw_results, data.frame(Variable = i, p_valor = p_val, Normalidad = norm)) 
+} 
+# Mostrar los resultados 
+sw_results
+
 royston_test <- mvn(data = data_diab[,-9], mvnTest = "royston")
 royston_test$multivariateNormality
 
@@ -132,17 +143,24 @@ kruskal.test(data_diab$BMI, data_diab$DiabetesPedigreeFunction)
 ```
 #Test de Normalidad
 ```{r}
-par(mfcol = c(2, 8))
+# Establecer los márgenes del gráfico
+par(mfcol = c(2, 8), mar = c(2, 2, 2, 2), oma = c(2, 2, 2, 2))
+
+
+# Generar histogramas para cada variable
 for (k in 1:8) {
   j0 <- names(data_diab)[k]
   x0 <- seq(min(data_diab[, k]), max(data_diab[, k]), le = 50)
   for (i in 1:2) {
     i0 <- levels(data_diab$Outcome)[i]
     x <- data_diab[data_diab$Outcome == i0, j0]
-    hist(x, proba = T, col = grey(0.8), main = paste( i0), xlab = j0)
+    hist(x, proba = T, col = grey(0.8), main = paste(i0), xlab = j0)
     lines(x0, dnorm(x0, mean(x), sd(x)), col = "red", lwd = 2)
   }
 }
+
+# Establecer el título del gráfico
+mtext("Histogramas de variables", outer = TRUE, cex = 1.5)
 ```
 
 #Modelo de Correlacion
@@ -151,18 +169,13 @@ correlations <- cor(data_diab[,1:8])
 corrplot(correlations, method="circle")
 ```
 
-#Tabla de Correlacion
-```{r}
-ggpairs(data_diab)
-```
-
 #Modelo de analisis de regresion
 ```{r}
 modelo <- glm(Outcome ~ ., data = data_diab, family = binomial)
 summary(modelo)
 ```
 
-#Step backward feature selection
+#seleccion de variables funcion step
 ```{r}
 step(modelo, direction = "backward")
 ```
@@ -189,7 +202,8 @@ rf_model <- randomForest(Outcome ~ . -SkinThickness, data = train, ntree = 100)
 
 #Validacion Cruzada
 ```{r}
-
+update.packages("caret")
+library(caret)
 cat("Regresión logistica", "\n", "\n")
 # Validación cruzada con 10 pliegues
 cv_log_reg <- cv.glm(train, log_reg_model, K = 10)
