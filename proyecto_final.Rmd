@@ -198,11 +198,8 @@ dim(test)
 log_reg_model = glm(Outcome ~ ., data = train, family = binomial)
 
 # Modelo de Random Forest
-design_matrix <- model.matrix(Outcome ~ ., data = train)
-response_variable <- train$Outcome
-
 set.seed(123)
-rf_model <- randomForest(design_matrix, response_variable, ntree = 500, mtry = 2)
+rf_model <- randomForest(x = train[1:7], y = train$Outcome, ntree = 100, mtry = 2)
 ```
 
 
@@ -243,25 +240,25 @@ cat("Desviación estándar del error de predicción: ", sd_error_rf*100, "\n")
 cat("Regresión logistica", "\n", "\n")
 
 # Ajustar el modelo al conjunto de datos de prueba
-fit <- predict(log_reg_model, test, type = "response")
+pred_logreg <- predict(log_reg_model, test, type = "response")
 
 # Calcular el área bajo la curva ROC utilizando el conjunto de datos de entrenamiento
-auc <- roc(test$Outcome, fit)
+auc_logreg <- roc(test$Outcome, pred_logreg)
 
 # Imprimir el valor del área bajo la curva ROC
-cat("Área bajo la curva ROC: ", auc$auc, "\n")
+cat("Área bajo la curva ROC: ", auc_logreg$auc, "\n")
 
 
 cat("\n","\n", "Random Forest", "\n", "\n")
 
 # Obtener las predicciones del modelo para el conjunto de datos de prueba
-pred_rf <- predict(rf_model, newdata = test)
+pred_rf <- predict(rf_model, newdata = test, type = "response")
 
 # Calcular el área bajo la curva ROC
-roc_rf <- roc(response = test$Outcome, predictor = pred_rf)
+auc_rf <- roc(response = test$Outcome, predictor = as.numeric(pred_rf))
 
 # Imprimir el valor del área bajo la curva ROC
-cat("Área bajo la curva ROC: ", roc_rf$auc)
+cat("Área bajo la curva ROC: ", auc_rf$auc)
 
 ```
 
@@ -286,36 +283,26 @@ cat("\n","\n","factor de inflación de la varianza","\n","\n")
 vif(log_reg_model)
 ```
 
-#Matriz de Confusion
-```{r}
-predicciones <- ifelse(test = log_reg_model$fitted.values > 0.5, yes = 1, no = 0)
-matriz_confusion <- table(log_reg_model$model$Outcome, predicciones,
-                          dnn = c("observaciones", "predicciones"))
-cat("\nMatriz de Confusión - Regresión Logística\n")
-cat("Este es el resultado de evaluar el modelo en el conjunto de datos de entrenamiento:\n\n")
-matriz_confusion
-```
-```{r}
-mosaic(matriz_confusion, shade = T, colorize = T,
-       gp = gpar(fill = matrix(c("green3", "red2", "red2", "green3"), 2, 2)))
-```
 
 #Matriz de confusion (Data: Test) 
 ```{r}
-glm.probs <- predict(log_reg_model, newdata = test, type = "response")
-glm.pred <- ifelse(glm.probs > 0.5, "1", "0")
+predictions_logreg <- ifelse(pred_logreg > 0.5, "1", "0")
 
-matriz.test <- table(test$Outcome, glm.pred,
-      dnn = c("observaciones", "predicciones"))
+reg_log.matriz <- confusionMatrix(factor(predictions_logreg), reference = test$Outcome)
 cat("\nMatriz de Confusión - Regresión Logística\n")
 cat("Este es el resultado de evaluar el modelo en el conjunto de datos de prueba:\n\n")
-matriz.test
 
+reg_log.matriz
 ```
 
 ```{r}
-mosaic(matriz.test, shade = T, colorize = T,
-       gp = gpar(fill = matrix(c("green3", "red2", "red2", "green3"), 2, 2)))
+predictions_rf <- ifelse(as.numeric(pred_rf) > 0.5, "1", "0")
+
+rf.matriz <- confusionMatrix(factor(predictions_rf, levels = levels(test$Outcome)), test$Outcome)
+
+cat("\n\nMatriz de Confusión - Random Forest\n")
+cat("Este es el resultado de evaluar el modelo en el conjunto de datos de prueba:\n\n")
+
+rf.matriz
 
 ```
-
